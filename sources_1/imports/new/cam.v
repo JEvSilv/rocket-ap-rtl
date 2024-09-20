@@ -18,7 +18,7 @@ module CAM #(
    parameter WORD_SIZE = 8,
    parameter CELL_QUANT = 128 
 ) (
-  input [clogb2(CELL_QUANT)-1:0] addr_in,
+  input [clogb2(CELL_QUANT)-2:0] addr_in,
   input [CELL_QUANT-1:0] cell_wea_ctrl_ap,
   input internal_col_in,
   input cam_mode,

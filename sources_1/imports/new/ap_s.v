@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+
 //////////////////////////////////////////////////////////////////////////////////
 // Company: 
 // Engineer: 
@@ -63,7 +64,18 @@ module AP_s #(
  reg [WORD_SIZE-1:0] ap_w_buffer;
  reg wea_a, wea_b, wea_c;
  
- reg [2:0] wea_abc;
+ wire [2:0] wea_abc;
+
+ /* Selecting data_in */
+ wire [WORD_SIZE-1:0] data_in_a_cam;
+ wire [WORD_SIZE-1:0] data_in_b_cam;
+ wire [WORD_SIZE-1:0] data_in_c_cam;
+
+ assign data_in_a_cam = ap_mode ? data_in_a : data_in; 
+ assign data_in_b_cam = ap_mode ? data_in_b : data_in; 
+ assign data_in_c_cam = ap_mode ? data_in_c : data_in; 
+
+ assign wea_abc = write_en ? 1 << sel_col : 0;
  
  reg [CELL_QUANT-1:0] cell_wea_ctrl_ap_a;
  reg [CELL_QUANT-1:0] cell_wea_ctrl_ap_b;
@@ -192,7 +204,7 @@ generate
         cell_wea_ctrl_ap_a,
         sel_internal_col,
         cam_mode_a,
-        data_in_a,
+        data_in_a_cam,
         op_direction,
         key_a,
         key_b,
@@ -210,7 +222,7 @@ generate
         cell_wea_ctrl_ap_b,
         sel_internal_col,
         cam_mode_b,
-        data_in_b,
+        data_in_b_cam,
         op_direction,
         key_b,
         key_a,
@@ -229,7 +241,7 @@ generate
         cell_wea_ctrl_ap_c,
         sel_internal_col,
         cam_mode_c,
-        data_in_c,
+        data_in_c_cam,
         op_direction,
         key_c,
         key_c,
@@ -252,9 +264,9 @@ begin
       mask_c <= 8'hff;
       key_a <= 0;
       key_b <= 0;
-	  key_c <= 0;
-	  bit_cnt <= 0;
-	  pass_cnt <= 0;
+	    key_c <= 0;
+	    bit_cnt <= 0;
+	    pass_cnt <= 0;
       ap_state_irq <= 0;
       cell_wea_ctrl_ap_a <= 0;
       cell_wea_ctrl_ap_b <= 0;
@@ -336,19 +348,19 @@ begin
              end
              
              cell_wea_ctrl_ap_c <= 0;
-             $display("cell_wea_ctrl_ap_c: %b", cell_wea_ctrl_ap_c);
+            //  $display("cell_wea_ctrl_ap_c: %b", cell_wea_ctrl_ap_c);
           end
           WRITE: begin
-            $display("@WRITE");
-            $display("Key (A,B,C): %b %b %b", key_a, key_b, key_c);
-            $display("Mask (A,B,C): %b %b %b", mask_a, mask_b, mask_c);
-            $display("data_in_c: %b", data_in_c);
-            $display("tags_b: %b", tags_b);
-            $display("tags_c: %b", tags_c);
-            $display("mask_c: %b", mask_c);
-            $display("bit_count: %d", bit_cnt);
-            $display("bit_count_mult: %d", bit_cnt_mult);
-            $display("pass: %d\n", pass_cnt);
+            // $display("@WRITE");
+            // $display("Key (A,B,C): %b %b %b", key_a, key_b, key_c);
+            // $display("Mask (A,B,C): %b %b %b", mask_a, mask_b, mask_c);
+            // $display("data_in_c: %b", data_in_c);
+            // $display("tags_b: %b", tags_b);
+            // $display("tags_c: %b", tags_c);
+            // $display("mask_c: %b", mask_c);
+            // $display("bit_count: %d", bit_cnt);
+            // $display("bit_count_mult: %d", bit_cnt_mult);
+            // $display("pass: %d\n", pass_cnt);
             
             // Alterar para 2D - horizontal
             if(op_direction == 1) begin
@@ -418,27 +430,28 @@ begin
             mask_c <= 8'hff;
           end
         endcase
-    end else begin
-    if (write_en) begin
-        wea_abc <= 1 << sel_col;
-        case(sel_col) 
-            0: begin 
-                data_in_a <= data_in;
-            end
-            1: begin 
-                data_in_b <= data_in;
-            end
-            2: begin
-                data_in_c <= data_in;
-            end
-            default: begin
-                data_in_a <= data_in;
-            end
-        endcase
-      end else begin
-        wea_abc <= 0;
-      end 
-    end
+    end //else begin
+    /* if (write_en) begin */
+    /*     /1* wea_abc <= 1 << sel_col; *1/ */
+    /*     case(sel_col) */ 
+    /*         0: begin */ 
+    /*             data_in_a <= data_in; */
+    /*         end */
+    /*         1: begin */ 
+    /*             data_in_b <= data_in; */
+    /*         end */
+    /*         2: begin */
+    /*             data_in_c <= data_in; */
+    /*         end */
+    /*         default: begin */
+    /*             data_in_a <= data_in; */
+    /*         end */
+    /*     endcase */
+    /*   end */
+    /*   /1* else begin *1/ */
+      /*   wea_abc <= 0; */
+      /* end */ 
+    //end
   end
 end
 
