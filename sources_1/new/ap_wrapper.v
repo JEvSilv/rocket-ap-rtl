@@ -10,6 +10,7 @@ module APWrapper #(
    parameter CELL_QUANT = 128
 ) (
     input         clock,
+    input         reset,
     input         read_async,
     input         settings_write_en,
     input         io_req_valid,
@@ -53,17 +54,54 @@ module APWrapper #(
   end
   
   // Defining the outputs
-  assign io_resp_0 = io_req_bits_addr == (SETTINGS_REGS_START_REGION + 8) ? ap_ap_state_irq_w : ap_data_out_w;
+  assign io_resp_0 = (io_req_bits_addr == (SETTINGS_REGS_START_REGION + 8) || ap_trigger_ap == 1) ? ap_ap_state_irq_w : ap_data_out_w;
   
   // Add reset?
   always @ (posedge clock) begin
+    if(reset) begin
+      ap_rst <= 0;
+      ap_if_state <= 0;
+      ap_op_direction <= 0; // 0 -> vertical | 1 -> horizontal
+      ap_cmd <= 0;
+      ap_sel_col <= 0;
+      ap_sel_internal_col <= 0;
+      ap_addr_in <= 0;
+      ap_data_in <= 0;
+      ap_trigger_ap <= 0;
+    end
 
-    if(ap_trigger_ap == 0 & ap_if_state == 0) begin
+    if(ap_if_state == 0) begin
     // if(io_req_bits_addr < SETTINGS_REGS_START_REGION) begin
       // Memory enable, data and addr
       if(io_req_valid) begin
         ap_addr_in <= io_req_bits_addr;
         ap_data_in <= io_req_bits_wdata;
+
+        // Memory settings
+        if(io_req_bits_addr <  CAM_B_START_REGION) begin
+          ap_sel_col <= 0;
+          if(io_req_bits_addr < CELL_QUANT) begin
+            ap_sel_internal_col <= 0;
+          end else begin
+            ap_sel_internal_col <= 1;
+          end
+        end else if(io_req_bits_addr <  CAM_C_START_REGION) begin
+          ap_sel_col <= 1;
+          if(io_req_bits_addr < (CAM_B_START_REGION + CELL_QUANT)) begin
+            ap_sel_internal_col <= 0;
+          end else begin
+            ap_sel_internal_col <= 1;
+          end
+        end else if(io_req_bits_addr < SETTINGS_REGS_START_REGION) begin 
+          ap_sel_col <= 2;
+          if(io_req_bits_addr < (CAM_C_START_REGION + CELL_QUANT)) begin
+            ap_sel_internal_col <= 0;
+          end else begin
+            ap_sel_internal_col <= 1;
+          end
+        end
+
+
       end else if(read_async) begin
         ap_addr_in <= io_req_bits_addr;
       end
@@ -74,29 +112,29 @@ module APWrapper #(
 
       ap_write_enable <= io_req_bits_write;
 
-      // Memory settings
-      if(io_req_bits_addr <  CAM_B_START_REGION) begin
-        ap_sel_col <= 0;
-        if(io_req_bits_addr < CELL_QUANT) begin
-          ap_sel_internal_col <= 0;
-        end else begin
-          ap_sel_internal_col <= 1;
-        end
-      end else if(io_req_bits_addr <  CAM_C_START_REGION) begin
-        ap_sel_col <= 1;
-        if(io_req_bits_addr < (CAM_B_START_REGION + CELL_QUANT)) begin
-          ap_sel_internal_col <= 0;
-        end else begin
-          ap_sel_internal_col <= 1;
-        end
-      end else if(io_req_bits_addr < SETTINGS_REGS_START_REGION) begin 
-        ap_sel_col <= 2;
-        if(io_req_bits_addr < (CAM_C_START_REGION + CELL_QUANT)) begin
-          ap_sel_internal_col <= 0;
-        end else begin
-          ap_sel_internal_col <= 1;
-        end
-      end
+      /* // Memory settings */
+      /* if(io_req_bits_addr <  CAM_B_START_REGION) begin */
+      /*   ap_sel_col <= 0; */
+      /*   if(io_req_bits_addr < CELL_QUANT) begin */
+      /*     ap_sel_internal_col <= 0; */
+      /*   end else begin */
+      /*     ap_sel_internal_col <= 1; */
+      /*   end */
+      /* end else if(io_req_bits_addr <  CAM_C_START_REGION) begin */
+      /*   ap_sel_col <= 1; */
+      /*   if(io_req_bits_addr < (CAM_B_START_REGION + CELL_QUANT)) begin */
+      /*     ap_sel_internal_col <= 0; */
+      /*   end else begin */
+      /*     ap_sel_internal_col <= 1; */
+      /*   end */
+      /* end else if(io_req_bits_addr < SETTINGS_REGS_START_REGION) begin */ 
+      /*   ap_sel_col <= 2; */
+      /*   if(io_req_bits_addr < (CAM_C_START_REGION + CELL_QUANT)) begin */
+      /*     ap_sel_internal_col <= 0; */
+      /*   end else begin */
+      /*     ap_sel_internal_col <= 1; */
+      /*   end */
+      /* end */
 
     end 
     
@@ -131,7 +169,7 @@ module APWrapper #(
        .cmd(ap_cmd),
        .sel_col(ap_sel_col),
        .sel_internal_col(ap_sel_internal_col),
-       .CLK100MHZ(clock),                       
+       .clock(clock),                       
        .write_en(ap_write_enable),
        .read_en(~io_req_bits_write),                           
        .data_out(ap_data_out_w),

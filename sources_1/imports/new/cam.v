@@ -30,15 +30,13 @@ module CAM #(
   
   input [WORD_SIZE-1:0] mask_v,
   input [WORD_SIZE-1:0] mask_h,
-  input CLK100MHZ,            
+  input clock,            
   input rst,
   input wea,                  
   output [CELL_QUANT-1:0] tags,
   output [WORD_SIZE-1:0] doutb
 );
 
-wire clka;
-assign clka = CLK100MHZ;
 wire [WORD_SIZE-1:0] cell_doutb_ctrl [CELL_QUANT-1:0];
 wire [CELL_QUANT-1:0] wea_addr;
 wire [CELL_QUANT-1:0] cell_wea_ctrl;
@@ -74,7 +72,7 @@ generate
             masked_key_even,
             mask_v,
             rst, 
-            clka, 
+            clock, 
             cell_wea_ctrl[g], 
             tags[g],
             cell_doutb_ctrl[g]
@@ -88,7 +86,7 @@ generate
             masked_key_odd,
             mask_d,
             rst, 
-            clka, 
+            clock, 
             cell_wea_ctrl[g+1], 
             tags[g+1],
             cell_doutb_ctrl[g+1]

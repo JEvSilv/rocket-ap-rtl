@@ -34,7 +34,7 @@ module AP_s #(
   input [2:0] cmd,
   input [1:0] sel_col,
   input sel_internal_col,
-  input CLK100MHZ,                       
+  input clock,                       
   input write_en,
   input read_en,                           
   output reg [WORD_SIZE-1:0] data_out,
@@ -44,8 +44,6 @@ module AP_s #(
  // Internal parameters
  parameter MULT_BIT_SIZE = 4;
 
- wire clka;
- assign clka = CLK100MHZ;
  reg  [WORD_SIZE-1:0] key_a;
  reg  [WORD_SIZE-1:0] key_b;
  // plus one bit for carry and borrow
@@ -161,8 +159,8 @@ reg [3:0] bit_cnt_mult; //mult
 reg [2:0] pass_cnt;
 
 // Parallel FSM 
-always @ (posedge clka) begin
-	if (rst) begin
+always @ (posedge clock) begin
+	if (rst || ~ap_mode) begin
 	   next_state = INIT;
 	   ap_state = INIT;
 	end else begin
@@ -210,7 +208,7 @@ generate
         key_b,
         mask_a,
         mask_b,
-        CLK100MHZ,
+        clock,
         rst,
         wea_abc[0],
         tags_a,
@@ -228,7 +226,7 @@ generate
         key_a,
         mask_b,
         mask_a,
-        CLK100MHZ,
+        clock,
         rst,
         wea_abc[1],
         tags_b,
@@ -247,7 +245,7 @@ generate
         key_c,
         mask_c,
         mask_c,
-        CLK100MHZ,
+        clock,
         rst,
         wea_abc[2],
         tags_c,
@@ -256,7 +254,7 @@ generate
  endgenerate
  
 integer i;
-always @ (posedge clka)
+always @ (posedge clock)
 begin
 	if (rst) begin
       mask_a <= 8'hff; // Assumption: cell of 8 bits
@@ -267,7 +265,6 @@ begin
 	    key_c <= 0;
 	    bit_cnt <= 0;
 	    pass_cnt <= 0;
-      ap_state_irq <= 0;
       cell_wea_ctrl_ap_a <= 0;
       cell_wea_ctrl_ap_b <= 0;
       cell_wea_ctrl_ap_c <= 0;
@@ -430,7 +427,11 @@ begin
             mask_c <= 8'hff;
           end
         endcase
-    end //else begin
+    end      /* ap_state_irq <= 0; */
+      /* pass_cnt <= 0; */
+      /* bit_cnt <= 0; */
+      /* bit_cnt_mult <= 0; */
+      /* ap_state_irq <= 0; */
     /* if (write_en) begin */
     /*     /1* wea_abc <= 1 << sel_col; *1/ */
     /*     case(sel_col) */ 
