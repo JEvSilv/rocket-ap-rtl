@@ -67,7 +67,7 @@ module AP_s #(
  /* Selecting data_in */
  wire [WORD_SIZE-1:0] data_in_a_cam;
  wire [WORD_SIZE-1:0] data_in_b_cam;
- wire [WORD_SIZE-1:0] data_in_c_cam;
+ wire [WORD_SIZE:0] data_in_c_cam;
 
  assign data_in_a_cam = ap_mode ? data_in_a : data_in; 
  assign data_in_b_cam = ap_mode ? data_in_b : data_in; 
