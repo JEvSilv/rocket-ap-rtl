@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`define MULTIPLE_TARGETS
 
 //////////////////////////////////////////////////////////////////////////////////
 // Company: 
@@ -28,47 +29,72 @@ module AP_s #(
 ) (
   input [clogb2(CELL_QUANT)-1:0] addr_in,
   input [WORD_SIZE-1:0] data_in,         
-  input rst,
+  input [2:0] rst, // [001] -> A | [010] -> B | [100] -> B
   input ap_mode,
   input op_direction, // 0 -> vertical | 1 -> horizontal
+  input op_target,    // 0 -> C | 1 -> A
   input [2:0] cmd,
   input [1:0] sel_col,
   input sel_internal_col,
-  input clock,                       
+  input clock,              
   input write_en,
   input read_en,                           
   output reg [WORD_SIZE-1:0] data_out,
   output reg ap_state_irq
 );
+ 
+// operation target
+
+//  wire clock;
+//  assign clock = CLK100MHZ;
+ 
+`ifdef MULTIPLE_TARGETS
+ reg  [WORD_SIZE:0] key_a;
+ reg  [WORD_SIZE:0] mask_a;
+ wire [WORD_SIZE:0] data_out_a;
+ reg [WORD_SIZE:0] data_in_a;
+ wire [WORD_SIZE:0] data_in_a_cam;
+`else
+ reg  [WORD_SIZE-1:0] key_a;
+ reg  [WORD_SIZE-1:0] mask_a;
+ wire [WORD_SIZE-1:0] data_out_a;
+ reg [WORD_SIZE-1:0] data_in_a;
+ wire [WORD_SIZE-1:0] data_in_a_cam;
+`endif
+
 
  // Internal parameters
  parameter MULT_BIT_SIZE = 4;
 
- reg  [WORD_SIZE-1:0] key_a;
+ //reg  [WORD_SIZE:0] key_a;
  reg  [WORD_SIZE-1:0] key_b;
  // plus one bit for carry and borrow
  reg  [WORD_SIZE:0] key_c;
- reg  [WORD_SIZE-1:0] mask_a;
+
+ //reg  [WORD_SIZE:0] mask_a;
  reg  [WORD_SIZE-1:0] mask_b;
  // plus one bit for carry and borrow
  reg  [WORD_SIZE:0] mask_c;
- wire [WORD_SIZE-1:0] data_out_a;
+
+ //wire [WORD_SIZE:0] data_out_a;
  wire [WORD_SIZE-1:0] data_out_b;
  wire [WORD_SIZE:0] data_out_c;
- reg [WORD_SIZE-1:0] data_in_a;
+ 
+ //reg [WORD_SIZE:0] data_in_a;
  reg [WORD_SIZE-1:0] data_in_b;
  // plus one bit for carry and borrow
  reg [WORD_SIZE:0] data_in_c; 
- reg [WORD_SIZE-1:0] ap_w_buffer;
+
  reg wea_a, wea_b, wea_c;
  
  wire [2:0] wea_abc;
 
  /* Selecting data_in */
- wire [WORD_SIZE-1:0] data_in_a_cam;
+ //wire [WORD_SIZE:0] data_in_a_cam;
  wire [WORD_SIZE-1:0] data_in_b_cam;
  wire [WORD_SIZE:0] data_in_c_cam;
-
+ 
+ // IDEA: Always assing data_in in wrapper
  assign data_in_a_cam = ap_mode ? data_in_a : data_in; 
  assign data_in_b_cam = ap_mode ? data_in_b : data_in; 
  assign data_in_c_cam = ap_mode ? data_in_c : data_in; 
@@ -85,6 +111,9 @@ module AP_s #(
  
  reg cam_mode_a, cam_mode_b, cam_mode_c;
  
+// CAMs parameters
+parameter CAM_A=2'b00, CAM_B=2'b01, CAM_C=2'b10;
+
 // FSM 
 parameter INIT=2'b00, COMPARE=2'b01, WRITE=2'b10, DONE=2'b11;
 reg [1:0] ap_state, next_state;
@@ -163,12 +192,17 @@ always @ (posedge clock) begin
 	if (rst || ~ap_mode) begin
 	   next_state = INIT;
 	   ap_state = INIT;
+     
 	end else begin
 	   if(ap_mode) begin
 	       ap_state = next_state;
 	       case(ap_state)
           INIT: begin	
-            next_state = COMPARE;
+            if (cmd == 7) begin
+              next_state = DONE;
+            end else begin 
+              next_state = COMPARE;
+            end
           end
           COMPARE: begin
             if (cmd != 6) begin
@@ -196,20 +230,66 @@ always @ (posedge clock) begin
     end
 end
 
+`ifdef MULTIPLE_TARGETS
+// Target wires --------------------------------------------------
+wire [CELL_QUANT-1:0] cell_wea_ctrl_ap_target_a;
+wire cam_mode_target_a;
+wire [WORD_SIZE:0] data_in_target_a;
+wire [WORD_SIZE:0] key_0_target_a;
+wire [WORD_SIZE:0] key_1_target_a;
+wire [WORD_SIZE:0] mask_0_target_a;
+wire [WORD_SIZE:0] mask_1_target_a;
+
+wire [CELL_QUANT-1:0] cell_wea_ctrl_ap_target_c;
+wire cam_mode_target_c;
+wire [WORD_SIZE:0] data_in_target_c;
+wire [WORD_SIZE:0] key_0_target_c;
+wire [WORD_SIZE:0] key_1_target_c;
+wire [WORD_SIZE:0] mask_0_target_c;
+wire [WORD_SIZE:0] mask_1_target_c;
+
+assign {cell_wea_ctrl_ap_target_a, cell_wea_ctrl_ap_target_c} 
+        = op_target ? {cell_wea_ctrl_ap_c, cell_wea_ctrl_ap_a} 
+                    : {cell_wea_ctrl_ap_a, cell_wea_ctrl_ap_c};
+
+assign {cam_mode_target_a, cam_mode_target_c} 
+        = op_target ? {cam_mode_c, cam_mode_a} 
+                    : {cam_mode_a, cam_mode_c};
+
+assign {data_in_target_a, data_in_target_c} 
+         = op_target ? {data_in_c_cam, data_in_a_cam} 
+                    : {data_in_a_cam, data_in_c_cam};
+
+assign {key_0_target_a, key_0_target_c} 
+        = op_target ? {key_c, key_a} 
+                    : {key_a, key_c};
+
+assign {key_1_target_a, key_1_target_c} 
+        = op_target ? {key_c, key_b} 
+                    : {key_b, key_c};
+
+assign {mask_0_target_a, mask_0_target_c} 
+        = op_target ? {mask_c, mask_a} 
+                    : {mask_a, mask_c};
+
+assign {mask_1_target_a, mask_1_target_c} 
+        = op_target ? {mask_c, mask_b} 
+                    : {mask_b, mask_c};
+//---------------------------------------------------------------
 generate
-    CAM #(.WORD_SIZE(WORD_SIZE), .CELL_QUANT(CELL_QUANT)) cam_a(
+    CAM #(.WORD_SIZE(WORD_SIZE+1), .CELL_QUANT(CELL_QUANT)) cam_a(
         addr_in,
-        cell_wea_ctrl_ap_a,
+        cell_wea_ctrl_ap_target_a,
         sel_internal_col,
-        cam_mode_a,
-        data_in_a_cam,
+        cam_mode_target_a,
+        data_in_target_a,
         op_direction,
-        key_a,
-        key_b,
-        mask_a,
-        mask_b,
+        key_0_target_a,
+        key_1_target_a,
+        mask_0_target_a,
+        mask_1_target_a,
         clock,
-        rst,
+        rst[0],
         wea_abc[0],
         tags_a,
         data_out_a 
@@ -227,7 +307,7 @@ generate
         mask_b,
         mask_a,
         clock,
-        rst,
+        rst[1],
         wea_abc[1],
         tags_b,
         data_out_b
@@ -236,23 +316,81 @@ generate
     // Module_name #(.parameter_name(valor)) instance_name;    
     CAM #(.WORD_SIZE(WORD_SIZE+1), .CELL_QUANT(CELL_QUANT)) cam_c(
         addr_in,
-        cell_wea_ctrl_ap_c,
+        cell_wea_ctrl_ap_target_c,
         sel_internal_col,
-        cam_mode_c,
-        data_in_c_cam,
+        cam_mode_target_c,
+        data_in_target_c,
         op_direction,
-        key_c,
-        key_c,
-        mask_c,
-        mask_c,
+        key_0_target_c,
+        key_1_target_c,
+        mask_0_target_c,
+        mask_1_target_c,
         clock,
-        rst,
+        rst[2],
         wea_abc[2],
         tags_c,
         data_out_c
     );
  endgenerate
- 
+`else
+ generate
+  CAM #(.WORD_SIZE(WORD_SIZE), .CELL_QUANT(CELL_QUANT)) cam_a(
+      addr_in,
+      cell_wea_ctrl_ap_a,
+      sel_internal_col,
+      cam_mode_a,
+      data_in_a_cam,
+      op_direction,
+      key_a,
+      key_b,
+      mask_a,
+      mask_b,
+      clock,
+      rst[0],
+      wea_abc[0],
+      tags_a,
+      data_out_a 
+  );
+  
+  CAM #(.WORD_SIZE(WORD_SIZE), .CELL_QUANT(CELL_QUANT)) cam_b(
+      addr_in,
+      cell_wea_ctrl_ap_b,
+      sel_internal_col,
+      cam_mode_b,
+      data_in_b_cam,
+      op_direction,
+      key_b,
+      key_a,
+      mask_b,
+      mask_a,
+      clock,
+      rst[1],
+      wea_abc[1],
+      tags_b,
+      data_out_b
+  );
+
+  // Module_name #(.parameter_name(valor)) instance_name;    
+  CAM #(.WORD_SIZE(WORD_SIZE+1), .CELL_QUANT(CELL_QUANT)) cam_c(
+      addr_in,
+      cell_wea_ctrl_ap_c,
+      sel_internal_col,
+      cam_mode_c,
+      data_in_c_cam,
+      op_direction,
+      key_c,
+      key_c,
+      mask_c,
+      mask_c,
+      clock,
+      rst[2],
+      wea_abc[2],
+      tags_c,
+      data_out_c
+  );
+endgenerate	
+`endif
+
 integer i;
 always @ (posedge clock)
 begin
@@ -290,19 +428,47 @@ begin
     if (ap_mode) begin
         case(ap_state)
           INIT: begin
-            mask_a <= 1;
-            mask_b <= 1;
-            mask_c <= 9'h100 | 1; // assuming mask_c having 9 bits
             pass_cnt <= 0;
             bit_cnt <= 0;
             bit_cnt_mult <= 0;
             ap_state_irq <= 0;
-            cam_mode_c <= 1;
-            cell_wea_ctrl_ap_c <= 0;
-            ap_w_buffer <= 0;
+
+            if(cmd != 7) begin
+              mask_a <= 1;
+              cam_mode_a <= 0;
+              mask_c <= 9'h100 | 1; // assuming mask_c having 9 bits
+              cam_mode_c <= 1;
+              mask_b <= 1;
+
+              cell_wea_ctrl_ap_a <= 0;
+              cell_wea_ctrl_ap_b <= 0;
+              cell_wea_ctrl_ap_c <= 0;
+            end else begin
+              case(sel_col)
+                CAM_A: begin
+                      mask_a <= 8'hff;
+                      cell_wea_ctrl_ap_a <= {CELL_QUANT {1'b1}};
+                      cam_mode_a <= 1;
+                      data_in_a <= data_in;
+                      end
+                CAM_B: begin
+                      mask_b <= 8'hff;
+                      cell_wea_ctrl_ap_b <= {CELL_QUANT {1'b1}};
+                      cam_mode_b <= 1;
+                      data_in_b <= data_in;      
+                      end
+                CAM_C: begin
+                      mask_c <= 8'hff;
+                      cell_wea_ctrl_ap_c <= {CELL_QUANT {1'b1}};
+                      cam_mode_c <= 1;
+                      data_in_c <= data_in;
+                      end
+              endcase
+            end
           end
           COMPARE: begin
              $display("COMPARE");
+             // Parei a implementacao do op_target aq
              if(cmd < 4) begin
                  key_a <= (ap_lut[cmd][pass_cnt][0] << bit_cnt);
                  key_b <= (ap_lut[cmd][pass_cnt][1] << bit_cnt);
@@ -367,6 +533,9 @@ begin
                 if(sel_col == 1) begin    
                     cell_wea_ctrl_ap_c <= ((tags_b >> 1) & tags_b) & tags_c;
                 end
+                if(sel_col == 2) begin    
+                    cell_wea_ctrl_ap_c <= ((tags_c >> 1) & tags_c) & tags_a;
+                end
             end
             
             // Alterar para 2D - vertical
@@ -414,8 +583,6 @@ begin
                   end
                 end            
             end
-                        
-             
           end
           default: begin
             ap_state_irq <= 1;
@@ -427,32 +594,14 @@ begin
             mask_c <= 8'hff;
           end
         endcase
-    end      /* ap_state_irq <= 0; */
-      /* pass_cnt <= 0; */
-      /* bit_cnt <= 0; */
-      /* bit_cnt_mult <= 0; */
-      /* ap_state_irq <= 0; */
-    /* if (write_en) begin */
-    /*     /1* wea_abc <= 1 << sel_col; *1/ */
-    /*     case(sel_col) */ 
-    /*         0: begin */ 
-    /*             data_in_a <= data_in; */
-    /*         end */
-    /*         1: begin */ 
-    /*             data_in_b <= data_in; */
-    /*         end */
-    /*         2: begin */
-    /*             data_in_c <= data_in; */
-    /*         end */
-    /*         default: begin */
-    /*             data_in_a <= data_in; */
-    /*         end */
-    /*     endcase */
-    /*   end */
-    /*   /1* else begin *1/ */
-      /*   wea_abc <= 0; */
-      /* end */ 
-    //end
+    end else begin 
+      mask_a <= 8'hff;
+      mask_b <= 8'hff;
+      mask_c <= 8'hff;
+      cam_mode_a <= 0;
+      cam_mode_b <= 0;
+      cam_mode_c <= 0;
+    end     
   end
 end
 
