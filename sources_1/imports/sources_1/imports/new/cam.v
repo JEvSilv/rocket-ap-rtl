@@ -34,6 +34,7 @@ module CAM #(
   input rst,
   input wea,                  
   output [CELL_QUANT-1:0] tags,
+  output [WORD_SIZE-1:0] first_data_cell,
   output [WORD_SIZE-1:0] doutb
 );
 
@@ -58,6 +59,7 @@ assign masked_key_odd  = key_d & mask_d;
 assign masked_dina_odd = dina & mask_d;
 
 assign doutb = cell_doutb_ctrl[addr_in];
+assign first_data_cell = cell_doutb_ctrl[0];
 
 // Module_name #(.parameter_name(valor)) instance_name;
 // RAM_WIDTH

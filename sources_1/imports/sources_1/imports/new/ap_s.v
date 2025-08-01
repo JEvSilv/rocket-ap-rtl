@@ -182,6 +182,11 @@ assign mult_lut[1] = 6'b001101;
 assign mult_lut[2] = 6'b100101; //37
 assign mult_lut[3] = 6'b110110; //54
 
+// Regs for set value support
+wire [WORD_SIZE-1:0] first_data_cell_a;
+wire [WORD_SIZE-1:0] first_data_cell_b;
+wire [WORD_SIZE-1:0] first_data_cell_c;
+
 // Counters 
 reg [3:0] bit_cnt;
 reg [3:0] bit_cnt_mult; //mult
@@ -292,6 +297,7 @@ generate
         rst[0],
         wea_abc[0],
         tags_a,
+        first_data_cell_a,
         data_out_a 
     );
     
@@ -310,6 +316,7 @@ generate
         rst[1],
         wea_abc[1],
         tags_b,
+        first_data_cell_b,
         data_out_b
     );
 
@@ -329,6 +336,7 @@ generate
         rst[2],
         wea_abc[2],
         tags_c,
+        first_data_cell_c,
         data_out_c
     );
  endgenerate
@@ -449,19 +457,19 @@ begin
                       mask_a <= 8'hff;
                       cell_wea_ctrl_ap_a <= {CELL_QUANT {1'b1}};
                       cam_mode_a <= 1;
-                      data_in_a <= data_in;
+                      data_in_a <= first_data_cell_a;
                       end
                 CAM_B: begin
                       mask_b <= 8'hff;
                       cell_wea_ctrl_ap_b <= {CELL_QUANT {1'b1}};
                       cam_mode_b <= 1;
-                      data_in_b <= data_in;      
+                      data_in_b <= first_data_cell_b;      
                       end
                 CAM_C: begin
                       mask_c <= 8'hff;
                       cell_wea_ctrl_ap_c <= {CELL_QUANT {1'b1}};
                       cam_mode_c <= 1;
-                      data_in_c <= data_in;
+                      data_in_c <= first_data_cell_c;
                       end
               endcase
             end
