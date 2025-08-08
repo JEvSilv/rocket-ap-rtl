@@ -39,7 +39,7 @@ module APWrapper #(
                   // It is able to block the memory feature
   reg ap_op_direction; // 0 -> vertical | 1 -> horizontal
   reg op_target;    // 0 -> C | 1 -> A
-  reg [2:0] ap_cmd;
+  reg [3:0] ap_cmd;
   reg [1:0] ap_sel_col;
   reg ap_sel_internal_col;
   wire [WORD_SIZE-1:0] ap_data_out_w;

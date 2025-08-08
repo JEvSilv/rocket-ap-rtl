@@ -20,8 +20,7 @@
 // Additional Comments:
 // 
 //////////////////////////////////////////////////////////////////////////////////
-
-module AP_s #(
+(* keep_hierarchy = "yes" *) module AP_s #(
    parameter RAM_WIDTH = 1,
    parameter RAM_ADDR_BITS = 1,
    parameter WORD_SIZE = 8,
@@ -33,7 +32,7 @@ module AP_s #(
   input ap_mode,
   input op_direction, // 0 -> vertical | 1 -> horizontal
   input op_target,    // 0 -> C | 1 -> A
-  input [2:0] cmd,
+  input [3:0] cmd,
   input [1:0] sel_col,
   input sel_internal_col,
   input clock,              
@@ -193,46 +192,104 @@ reg [3:0] bit_cnt_mult; //mult
 reg [2:0] pass_cnt;
 
 // Parallel FSM 
+/* always @ (posedge clock) begin */
+/* 	if (rst || ~ap_mode) begin */
+/* 	   next_state = INIT; */
+/* 	   ap_state = INIT; */
+     
+/* 	end else begin */
+/* 	   if(ap_mode) begin */
+/* 	       ap_state = next_state; */
+/* 	       case(ap_state) */
+/*           INIT: begin */	
+/*             if (cmd == 7) begin */
+/*               next_state = DONE; */
+/*             end else if (cmd == 8) begin */
+/*                 next_state = WRITE; */
+/*               end else begin */
+/*                 next_state = COMPARE; */
+/*               end */
+/*             end */
+/*           end */
+/*           COMPARE: begin */
+/*             if (cmd != 6) begin */
+/*              if(bit_cnt == 4'b1000) begin */
+/*                 next_state = DONE; */
+/*              end else begin */
+/*                 next_state = WRITE; */	       
+/*              end */
+/*             end else begin */
+/*              if(bit_cnt == (MULT_BIT_SIZE+1)) begin */
+/*                next_state = DONE; */
+/*              end else begin */
+/*                next_state = WRITE; */           
+/*              end */                
+/*             end */ 
+/*           end */
+/*           WRITE: begin */
+/*             if (cmd == 8) begin */
+/*               next_state = DONE; */
+/*             end else begin */
+/*               next_state = COMPARE; */         
+/*             end */
+/*           end */
+/*           default: begin */
+/*             next_state = DONE; */
+/*           end */
+/*           endcase */
+/*        end */
+/*     end */
+/* end */
+
+// Parallel FSM 
 always @ (posedge clock) begin
 	if (rst || ~ap_mode) begin
-	   next_state = INIT;
-	   ap_state = INIT;
-     
+		next_state = INIT;
+		ap_state = INIT;
 	end else begin
-	   if(ap_mode) begin
-	       ap_state = next_state;
-	       case(ap_state)
-          INIT: begin	
-            if (cmd == 7) begin
-              next_state = DONE;
-            end else begin 
-              next_state = COMPARE;
-            end
-          end
-          COMPARE: begin
-            if (cmd != 6) begin
-             if(bit_cnt == 4'b1000) begin
-                next_state = DONE;
-             end else begin
-                next_state = WRITE;	       
-             end
-            end else begin
-             if(bit_cnt == (MULT_BIT_SIZE+1)) begin
-               next_state = DONE;
-             end else begin
-               next_state = WRITE;           
-             end                
-            end 
-          end
-          WRITE: begin
-            next_state = COMPARE;         
-          end
-          default: begin
-            next_state = DONE;
-          end
-          endcase
-       end
-    end
+		if (ap_mode) begin
+			ap_state = next_state;
+			case (ap_state)
+				INIT: begin	
+					if (cmd == 7) begin
+						next_state = DONE;
+					end else if (cmd == 8) begin
+						next_state = WRITE;
+					end else begin
+						next_state = COMPARE;
+					end
+				end
+
+				COMPARE: begin
+					if (cmd != 6) begin
+						if (bit_cnt == 4'b1000) begin
+							next_state = DONE;
+						end else begin
+							next_state = WRITE;	       
+						end
+					end else begin
+						if (bit_cnt == (MULT_BIT_SIZE+1)) begin
+							next_state = DONE;
+						end else begin
+							next_state = WRITE;           
+						end                
+					end 
+				end
+
+				WRITE: begin
+					if (cmd == 8) begin
+						next_state = DONE;
+					end else begin
+						next_state = COMPARE;         
+					end
+				end
+
+				default: begin
+					next_state = DONE;
+				end
+			endcase
+		end
+	end
 end
 
 `ifdef MULTIPLE_TARGETS
@@ -441,7 +498,7 @@ begin
             bit_cnt_mult <= 0;
             ap_state_irq <= 0;
 
-            if(cmd != 7) begin
+            if(cmd < 7) begin
               mask_a <= 1;
               cam_mode_a <= 0;
               mask_c <= 9'h100 | 1; // assuming mask_c having 9 bits
@@ -452,26 +509,35 @@ begin
               cell_wea_ctrl_ap_b <= 0;
               cell_wea_ctrl_ap_c <= 0;
             end else begin
-              case(sel_col)
-                CAM_A: begin
-                      mask_a <= 8'hff;
-                      cell_wea_ctrl_ap_a <= {CELL_QUANT {1'b1}};
-                      cam_mode_a <= 1;
-                      data_in_a <= first_data_cell_a;
-                      end
-                CAM_B: begin
-                      mask_b <= 8'hff;
-                      cell_wea_ctrl_ap_b <= {CELL_QUANT {1'b1}};
-                      cam_mode_b <= 1;
-                      data_in_b <= first_data_cell_b;      
-                      end
-                CAM_C: begin
-                      mask_c <= 8'hff;
-                      cell_wea_ctrl_ap_c <= {CELL_QUANT {1'b1}};
-                      cam_mode_c <= 1;
-                      data_in_c <= first_data_cell_c;
-                      end
-              endcase
+              if (cmd == 7) begin
+                case(sel_col)
+                  CAM_A: begin
+                        mask_a <= 8'hff;
+                        cell_wea_ctrl_ap_a <= {CELL_QUANT {1'b1}};
+                        cam_mode_a <= 1;
+                        data_in_a <= first_data_cell_a;
+                        end
+                  CAM_B: begin
+                        mask_b <= 8'hff;
+                        cell_wea_ctrl_ap_b <= {CELL_QUANT {1'b1}};
+                        cam_mode_b <= 1;
+                        data_in_b <= first_data_cell_b;      
+                        end
+                  CAM_C: begin
+                        mask_c <= 8'hff;
+                        cell_wea_ctrl_ap_c <= {CELL_QUANT {1'b1}};
+                        cam_mode_c <= 1;
+                        data_in_c <= first_data_cell_c;
+                        end
+                endcase
+              end else begin
+                data_in_c <= 1;
+                mask_a <= 8'hff;
+                key_a <= first_data_cell_b;
+                cam_mode_c <= 1;
+                mask_b <= 0;
+                mask_c <= 8'hff;
+              end
             end
           end
           COMPARE: begin
@@ -548,7 +614,11 @@ begin
             
             // Alterar para 2D - vertical
             if(op_direction == 0) begin
+              /* if (cmd == 8) begin */
+              /*   cell_wea_ctrl_ap_c <= tags_a; */
+              /* end else begin */
                 cell_wea_ctrl_ap_c <= tags_a & tags_b & tags_c;
+              /* end */
             end
             
             //cell_wea_ctrl_ap_c <= tags_a & tags_b & tags_c; // Test
@@ -590,7 +660,12 @@ begin
                     bit_cnt_mult <= bit_cnt_mult + 1;
                   end
                 end            
-            end
+             end
+
+             // SEARCH
+             /* if(cmd == 8) begin */
+             /*   data_in_c <= 1; */
+             /* end */
           end
           default: begin
             ap_state_irq <= 1;

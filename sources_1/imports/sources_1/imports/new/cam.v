@@ -13,7 +13,7 @@
  * to match with the AP top and FW 
 */
 
-module CAM #(
+(* keep_hierarchy = "yes" *) module CAM #(
    parameter RAM_ADDR_BITS = 1,
    parameter WORD_SIZE = 8,
    parameter CELL_QUANT = 128 
