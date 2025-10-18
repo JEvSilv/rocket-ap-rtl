@@ -41,7 +41,7 @@ module APWrapper #(
   reg op_target;    // 0 -> C | 1 -> A
   reg [3:0] ap_cmd;
   reg [1:0] ap_sel_col;
-  reg ap_sel_internal_col;
+  reg [2:0] ap_sel_internal_col;
   wire [WORD_SIZE-1:0] ap_data_out_w;
   wire ap_ap_state_irq_w;
   
@@ -85,13 +85,11 @@ module APWrapper #(
   assign cam_b_i_region = (cam_b_region == 1 && io_req_bits_addr >= CAM_B_I_START_REGION);
   assign cam_c_i_region = (cam_c_region == 1 && io_req_bits_addr >= CAM_C_I_START_REGION);
 
-  assign cam_internal_col = ((cam_a_i_region == 1) || 
-                            (cam_b_i_region == 1) || 
-                            (cam_c_i_region == 1)) ? 1 : 0;
+  assign cam_internal_col = ((cam_a_i_region == 1) ? 3'b001 : (cam_b_i_region == 1) ? 3'b010 : (cam_c_i_region == 1)) ? 3'b100 : 0;
   
 
   wire [1:0] final_cam_sel;
-  wire final_cam_internal_col;
+  wire [2:0] final_cam_internal_col;
 
   assign final_cam_sel = (ap_if_state == 1) ? ap_sel_col : cam_sel;
   assign final_cam_internal_col = (ap_if_state == 1) ? ap_sel_internal_col : cam_internal_col;

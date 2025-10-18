@@ -34,7 +34,7 @@
   input op_target,    // 0 -> C | 1 -> A
   input [3:0] cmd,
   input [1:0] sel_col,
-  input sel_internal_col,
+  input [2:0] sel_internal_col,
   input clock,              
   input write_en,
   input read_en,                           
@@ -159,6 +159,20 @@ assign add_lut[2] = 5'b01100;
 assign add_lut[3] = 5'b11111;
 assign add_lut[4] = 5'b10011;
 
+/* #                 {   Compare   ||  Write }  */
+/* #                 { Cr  | B | A || Cr | B }  */
+/* self.lut_add_d = [ ( 0,   1,  1,    1,   0), */
+/*                    ( 0,   0,  1,    0,   1), */
+/*                    ( 1,   0,  0,    0,   1), */
+/*                    ( 1,   1,  0,    1,   0)  */ 
+/*                 ] */
+wire [4:0] add_d_lut [0:3];
+assign add_d_lut[0] = 5'b01110;
+assign add_d_lut[1] = 5'b00101;
+assign add_d_lut[2] = 5'b10001;
+assign add_d_lut[3] = 5'b11010;
+
+
 // Carry | A | B | Carry | C 
 // [Cr C | Cr B A]
 // Carry MSB of C col?
@@ -190,57 +204,7 @@ wire [WORD_SIZE-1:0] first_data_cell_c;
 reg [3:0] bit_cnt;
 reg [3:0] bit_cnt_mult; //mult
 reg [2:0] pass_cnt;
-
-// Parallel FSM 
-/* always @ (posedge clock) begin */
-/* 	if (rst || ~ap_mode) begin */
-/* 	   next_state = INIT; */
-/* 	   ap_state = INIT; */
-     
-/* 	end else begin */
-/* 	   if(ap_mode) begin */
-/* 	       ap_state = next_state; */
-/* 	       case(ap_state) */
-/*           INIT: begin */	
-/*             if (cmd == 7) begin */
-/*               next_state = DONE; */
-/*             end else if (cmd == 8) begin */
-/*                 next_state = WRITE; */
-/*               end else begin */
-/*                 next_state = COMPARE; */
-/*               end */
-/*             end */
-/*           end */
-/*           COMPARE: begin */
-/*             if (cmd != 6) begin */
-/*              if(bit_cnt == 4'b1000) begin */
-/*                 next_state = DONE; */
-/*              end else begin */
-/*                 next_state = WRITE; */	       
-/*              end */
-/*             end else begin */
-/*              if(bit_cnt == (MULT_BIT_SIZE+1)) begin */
-/*                next_state = DONE; */
-/*              end else begin */
-/*                next_state = WRITE; */           
-/*              end */                
-/*             end */ 
-/*           end */
-/*           WRITE: begin */
-/*             if (cmd == 8) begin */
-/*               next_state = DONE; */
-/*             end else begin */
-/*               next_state = COMPARE; */         
-/*             end */
-/*           end */
-/*           default: begin */
-/*             next_state = DONE; */
-/*           end */
-/*           endcase */
-/*        end */
-/*     end */
-/* end */
-
+// TODO: ADD_D => CMD 9?
 // Parallel FSM 
 always @ (posedge clock) begin
 	if (rst || ~ap_mode) begin
@@ -342,7 +306,7 @@ generate
     CAM #(.WORD_SIZE(WORD_SIZE+1), .CELL_QUANT(CELL_QUANT)) cam_a(
         addr_in,
         cell_wea_ctrl_ap_target_a,
-        sel_internal_col,
+        sel_internal_col[0],
         cam_mode_target_a,
         data_in_target_a,
         op_direction,
@@ -361,7 +325,7 @@ generate
     CAM #(.WORD_SIZE(WORD_SIZE), .CELL_QUANT(CELL_QUANT)) cam_b(
         addr_in,
         cell_wea_ctrl_ap_b,
-        sel_internal_col,
+        sel_internal_col[1],
         cam_mode_b,
         data_in_b_cam,
         op_direction,
@@ -381,7 +345,7 @@ generate
     CAM #(.WORD_SIZE(WORD_SIZE+1), .CELL_QUANT(CELL_QUANT)) cam_c(
         addr_in,
         cell_wea_ctrl_ap_target_c,
-        sel_internal_col,
+        sel_internal_col[2],
         cam_mode_target_c,
         data_in_target_c,
         op_direction,
@@ -402,7 +366,7 @@ generate
   CAM #(.WORD_SIZE(WORD_SIZE), .CELL_QUANT(CELL_QUANT)) cam_a(
       addr_in,
       cell_wea_ctrl_ap_a,
-      sel_internal_col,
+      sel_internal_col[0],
       cam_mode_a,
       data_in_a_cam,
       op_direction,
@@ -420,7 +384,7 @@ generate
   CAM #(.WORD_SIZE(WORD_SIZE), .CELL_QUANT(CELL_QUANT)) cam_b(
       addr_in,
       cell_wea_ctrl_ap_b,
-      sel_internal_col,
+      sel_internal_col[1],
       cam_mode_b,
       data_in_b_cam,
       op_direction,
@@ -439,7 +403,7 @@ generate
   CAM #(.WORD_SIZE(WORD_SIZE+1), .CELL_QUANT(CELL_QUANT)) cam_c(
       addr_in,
       cell_wea_ctrl_ap_c,
-      sel_internal_col,
+      sel_internal_col[2],
       cam_mode_c,
       data_in_c_cam,
       op_direction,
@@ -497,8 +461,9 @@ begin
             bit_cnt <= 0;
             bit_cnt_mult <= 0;
             ap_state_irq <= 0;
-
-            if(cmd < 7) begin
+            
+            // ADDING ADD_D
+            if(cmd < 7 || cmd == 8) begin
               mask_a <= 1;
               cam_mode_a <= 0;
               mask_c <= 9'h100 | 1; // assuming mask_c having 9 bits
@@ -549,26 +514,38 @@ begin
                  mask_c <= 1 << bit_cnt;   
              end
              
-             // ADD and SUB
-             if(cmd == 4 || cmd == 5) begin
+             // ADD, ADD_D and SUB
+             if(cmd == 4 || cmd == 5 || cmd == 8) begin
                 if(cmd == 4) begin
                     key_a <= (add_lut[pass_cnt][0] << bit_cnt);
                     key_b <= (add_lut[pass_cnt][1] << bit_cnt);
                     // Carry or borrow
                     key_c <= (add_lut[pass_cnt][2] << 8);
-                end else begin
+                end
+                if(cmd == 5) begin
                     key_a <= (sub_lut[pass_cnt][0] << bit_cnt);
                     key_b <= (sub_lut[pass_cnt][1] << bit_cnt);
                     // Carry or borrow
                     key_c <= (sub_lut[pass_cnt][2] << 8);
                 end
+                // IF B is non-zero?
+                 // ADD Destructive
+                /* {   Compare   ||  Write }  */
+                /* { Cr  | B | A || Cr | B }  */
+                if(cmd == 8) begin
+                    key_a <= (add_d_lut[pass_cnt][2] << bit_cnt);
+                    key_c <= (add_d_lut[pass_cnt][3] << bit_cnt);
+                    // Carry or borrow
+                    key_c <= (add_d_lut[pass_cnt][4] << 8);
+                end
                 
                 mask_c <= 9'h100 | 1 << bit_cnt;
              end
+
             
-            //{     Compare    ||  Write }
-            //   5   4   3   2     1   0
-            //{ Cr | R | B | A || Cr | R }
+             //{     Compare    ||  Write }
+             //   5   4   3   2 ||  1   0
+             //{ Cr | R | B | A || Cr | R }
              if (cmd == 6) begin
                 mask_c <= (1 << (MULT_BIT_SIZE + bit_cnt)) | (1 << (bit_cnt + bit_cnt_mult));
                 key_a <= (mult_lut[pass_cnt][2] << bit_cnt);
@@ -634,17 +611,26 @@ begin
                 end
             end
             
-            // ADD and SUB
-            if(cmd == 4 || cmd == 5) begin
+            // ADD, ADD_D and SUB
+            if(cmd == 4 || cmd == 5 || cmd == 8) begin
                 if(cmd == 4)
                     data_in_c <= (add_lut[pass_cnt][4] << 8) | (add_lut[pass_cnt][3] << bit_cnt);
-                else
+                if(cmd == 5)
                     data_in_c <= (sub_lut[pass_cnt][4] << 8) | (sub_lut[pass_cnt][3] << bit_cnt);
-                
-                if(pass_cnt == 4) begin
-                  pass_cnt <= 0;
-                  bit_cnt <= bit_cnt + 1;
-                end            
+                if(cmd == 8)
+                    data_in_c <= (add_d_lut[pass_cnt][1] << 8) | (add_d_lut[pass_cnt][0] << bit_cnt);
+
+                if(cmd != 8) begin
+                  if(pass_cnt == 4) begin
+                    pass_cnt <= 0;
+                    bit_cnt <= bit_cnt + 1;
+                  end            
+                end else begin
+                  if(pass_cnt == 3) begin
+                    pass_cnt <= 0;
+                    bit_cnt <= bit_cnt + 1;
+                  end            
+                end
             end
             
             // MULTIPLICATION
