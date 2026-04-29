@@ -16,7 +16,7 @@
 (* keep_hierarchy = "yes" *) module CAM #(
    parameter RAM_ADDR_BITS = 1,
    parameter WORD_SIZE = 8,
-   parameter CELL_QUANT = 128 
+   parameter CELL_QUANT = 512 
 ) (
   input [clogb2(CELL_QUANT)-2:0] addr_in,
   input [CELL_QUANT-1:0] cell_wea_ctrl_ap,

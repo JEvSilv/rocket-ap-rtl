@@ -26,7 +26,7 @@ module BootROM(
     if (!$value$plusargs("maskromhex=%s", path)) begin
       //path = "C:/Users/Jonin/rocket_chip_rv32im_arty/rocket_chip_rv32im_arty.srcs/sources_1/imports/jonathassilveira-riscv-design-e6861d42ba7e/e300artydevkit/xip.hex";
       //path = "C:/Users/Jonin/rocket_chip_rv32im_arty/rocket_chip_rv32im_arty.srcs/sources_1/imports/jonathassilveira-riscv-design-e6861d42ba7e/e300artydevkit/xip_load_dtim.hex";
-      path = "C:/Users/Jonin/rocket-ap-arty/rocket-ap-arty.srcs/sources_1/imports/sources_1/imports/jonathassilveira-riscv-design-e6861d42ba7e/e300artydevkit/xip_modified.hex";
+      path = "C:/Users/camil/rocket-ap-dev/rocket-ap-dev.srcs/sim_1/imports/e300artydevkit/xip_modified.hex";
     end
     $readmemh(path, rom);
   end

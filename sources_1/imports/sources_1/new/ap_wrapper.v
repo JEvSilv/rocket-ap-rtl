@@ -7,13 +7,15 @@
 
 module APWrapper #(
    parameter WORD_SIZE = 8,
-   parameter CELL_QUANT = 128
+   parameter CELL_QUANT = 512
 ) (
     input         clock,
     input         reset,
     input         read_async,
     input         settings_write_en,
     input         io_req_valid,
+    input         io_req_arb_valid,
+    input  [clogb2(CELL_QUANT*3*2)-1:0] io_req_arb_addr, // 3 CAMs and Two Internal Columns 
     input  [clogb2(CELL_QUANT*3*2)-1:0] io_req_bits_addr, // 3 CAMs and Two Internal Columns 
     input  [clogb2(CELL_QUANT*3*2)-1:0] settings_io_req_bits_addr, // 3 CAMs and Two Internal Columns 
     input         io_req_bits_write,
@@ -32,9 +34,9 @@ module APWrapper #(
 
   parameter SETTINGS_REGS_START_REGION = CELL_QUANT * 6;
 
+  wire [clogb2(CELL_QUANT*3*2)-1:0] ap_addr_selected; 
 
-
-  reg [2:0] ap_rst;
+  reg [3:0] ap_rst;
   reg ap_if_state; // It controls the configuration interface
                   // It is able to block the memory feature
   reg ap_op_direction; // 0 -> vertical | 1 -> horizontal
@@ -50,50 +52,57 @@ module APWrapper #(
   reg ap_write_enable;
   reg ap_trigger_ap;
 
-  initial begin
-    ap_rst <= 0;
-    ap_if_state <= 0;
-    ap_op_direction <= 0; // 0 -> vertical | 1 -> horizontal
-    op_target <= 0;
-    ap_cmd <= 0;
-    ap_sel_col <= 0;
-    ap_sel_internal_col <= 0;
-    ap_addr_in <= 0;
-    ap_data_in <= 0;
-    ap_trigger_ap <= 0;
-  end
-  
+  /* initial begin */
+  /*   ap_rst <= 0; */
+  /*   ap_if_state <= 0; */
+  /*   ap_op_direction <= 0; // 0 -> vertical | 1 -> horizontal */
+  /*   op_target <= 0; */
+  /*   ap_cmd <= 0; */
+  /*   ap_sel_col <= 0; */
+  /*   ap_sel_internal_col <= 0; */
+  /*   ap_addr_in <= 0; */
+  /*   ap_data_in <= 0; */
+  /*   ap_trigger_ap <= 0; */
+  /*   ap_write_enable <= 0; */
+  /* end */
+
   // Defining the outputs
+  /* assign io_resp_0 = (io_req_arb_addr == (SETTINGS_REGS_START_REGION + 8) || ap_trigger_ap == 1) ? ap_ap_state_irq_w : ap_data_out_w; */
   assign io_resp_0 = (io_req_bits_addr == (SETTINGS_REGS_START_REGION + 8) || ap_trigger_ap == 1) ? ap_ap_state_irq_w : ap_data_out_w;
   
   wire cam_a_region;
   wire cam_b_region;
   wire cam_c_region;
   wire [1:0] cam_sel;
-  wire cam_internal_col;
+  wire [2:0] cam_internal_col;
 
   wire cam_a_i_region;
   wire cam_b_i_region;
   wire cam_c_i_region;
 
   assign cam_a_region = (io_req_bits_addr < CAM_B_START_REGION) ? 1 : 0;
-  assign cam_b_region = (io_req_bits_addr >= CAM_B_START_REGION && io_req_bits_addr < CAM_C_START_REGION) ? 1 : 0;
-  assign cam_c_region = (io_req_bits_addr >= CAM_C_START_REGION && io_req_bits_addr < SETTINGS_REGS_START_REGION) ? 1 : 0;
+  assign cam_b_region = (io_req_bits_addr >= CAM_B_START_REGION & io_req_bits_addr < CAM_C_START_REGION) ? 1 : 0;
+  assign cam_c_region = (io_req_bits_addr >= CAM_C_START_REGION & io_req_bits_addr < SETTINGS_REGS_START_REGION) ? 1 : 0;
   assign cam_sel = (cam_a_region == 1) ? 0 : (cam_b_region == 1) ? 1 : (cam_c_region == 1) ? 2 : 0;
 
-  assign cam_a_i_region = (cam_a_region == 1 && io_req_bits_addr >= CAM_A_I_START_REGION) ;
-  assign cam_b_i_region = (cam_b_region == 1 && io_req_bits_addr >= CAM_B_I_START_REGION);
-  assign cam_c_i_region = (cam_c_region == 1 && io_req_bits_addr >= CAM_C_I_START_REGION);
+  assign cam_a_i_region = (cam_a_region == 1 & io_req_bits_addr >= CAM_A_I_START_REGION) ;
+  assign cam_b_i_region = (cam_b_region == 1 & io_req_bits_addr >= CAM_B_I_START_REGION);
+  assign cam_c_i_region = (cam_c_region == 1 & io_req_bits_addr >= CAM_C_I_START_REGION);
 
-  assign cam_internal_col = ((cam_a_i_region == 1) ? 3'b001 : (cam_b_i_region == 1) ? 3'b010 : (cam_c_i_region == 1)) ? 3'b100 : 0;
-  
+  //assign cam_internal_col = ((cam_a_i_region == 1) ? 3'b001 : (cam_b_i_region == 1) ? 3'b010 : (cam_c_i_region == 1)) ? 3'b100 : 0;
+  assign cam_internal_col =  cam_a_i_region | (cam_b_i_region << 1) | (cam_c_i_region << 2);
 
   wire [1:0] final_cam_sel;
   wire [2:0] final_cam_internal_col;
 
   assign final_cam_sel = (ap_if_state == 1) ? ap_sel_col : cam_sel;
   assign final_cam_internal_col = (ap_if_state == 1) ? ap_sel_internal_col : cam_internal_col;
+
+  // Writing
+  wire internal_settings_region;
+  assign internal_settings_region = (io_req_bits_addr >= SETTINGS_REGS_START_REGION) & (io_req_valid == 1) & (io_req_bits_write == 1);
   
+
   // Add reset?
   always @ (posedge clock) begin
     if(reset) begin
@@ -106,48 +115,49 @@ module APWrapper #(
       ap_addr_in <= 0;
       ap_data_in <= 0;
       ap_trigger_ap <= 0;
+      ap_write_enable <= 0;
     end
 
-    /* else begin */
-	      // AP configuration
-        if(settings_write_en) begin 
-          if(settings_io_req_bits_addr == SETTINGS_REGS_START_REGION) begin
+	    // AP configuration
+    if(internal_settings_region) begin 
+        if(io_req_bits_addr == SETTINGS_REGS_START_REGION) begin
             ap_cmd <= io_req_bits_wdata[7:0];
             ap_op_direction <= io_req_bits_wdata[15:8];
             ap_sel_col <= io_req_bits_wdata[23:16];
             ap_sel_internal_col <= io_req_bits_wdata[31:24];
             // ap_mode_reg_out <= io_req_bits_wdata;
-          end else begin 
-              if(settings_io_req_bits_addr == SETTINGS_REGS_START_REGION + 4) begin
+         end else begin 
+             if(io_req_bits_addr == SETTINGS_REGS_START_REGION + 4) begin
                   ap_rst <= io_req_bits_wdata[7:0];
                   ap_trigger_ap <= io_req_bits_wdata[15:8];
                   op_target <= io_req_bits_wdata[23:16];
                   ap_if_state <= io_req_bits_wdata[31:24]; 
               end
           end
-        /* end */ 
-    end
-	end
+      end else begin
+          if(ap_if_state == 0 && (io_req_valid == 1 | io_req_arb_valid == 1)) begin
+            ap_sel_col <= final_cam_sel;
+            ap_sel_internal_col <= cam_a_i_region | (cam_b_i_region << 1) | (cam_c_i_region << 2);
+            ap_data_in <= io_req_bits_wdata;
+            ap_addr_in <= io_req_bits_addr;
+            ap_write_enable <= io_req_bits_write;
+          end
+      end
+  end
 
   AP_s #(.WORD_SIZE(WORD_SIZE), .CELL_QUANT(CELL_QUANT)) AP (
-       //.addr_in(ap_addr_in), // 7f mask for 128 cells
-       .addr_in(io_req_bits_addr), // 7f mask for 128 cells
-
-       //.data_in(ap_data_in),     
-       .data_in(io_req_bits_wdata),           
-
+       .addr_in(ap_addr_in), // 7f mask for 128 cells
+       .data_in(ap_data_in),     
        .rst(ap_rst),
        .op_direction(ap_op_direction),
        .op_target(op_target),
        .ap_mode(ap_trigger_ap), // trigger ap computation
        .cmd(ap_cmd),
-       .sel_col(final_cam_sel),
-       //.sel_internal_col(ap_sel_internal_col),
-       .sel_internal_col(final_cam_internal_col),
+       .sel_col(ap_sel_col),
+       .sel_internal_col(ap_sel_internal_col),
        .clock(clock),                       
-       //.write_en(ap_write_enable),
-       .write_en(io_req_bits_write),
-       .read_en(~io_req_bits_write),                           
+       .write_en(ap_write_enable),
+       .read_en(~ap_write_enable),                           
        .data_out(ap_data_out_w),
        .ap_state_irq(ap_ap_state_irq_w)
   );

@@ -28,7 +28,8 @@
 ) (
   input [clogb2(CELL_QUANT)-1:0] addr_in,
   input [WORD_SIZE-1:0] data_in,         
-  input [2:0] rst, // [001] -> A | [010] -> B | [100] -> B
+  input [3:0] rst, // [001] -> A | [010] -> B | [100] -> C
+                   // [1000] -> AP Engine
   input ap_mode,
   input op_direction, // 0 -> vertical | 1 -> horizontal
   input op_target,    // 0 -> C | 1 -> A
@@ -207,7 +208,7 @@ reg [2:0] pass_cnt;
 // TODO: ADD_D => CMD 9?
 // Parallel FSM 
 always @ (posedge clock) begin
-	if (rst || ~ap_mode) begin
+	if (rst[3] | (ap_mode == 0)) begin
 		next_state = INIT;
 		ap_state = INIT;
 	end else begin
@@ -423,15 +424,15 @@ endgenerate
 integer i;
 always @ (posedge clock)
 begin
-	if (rst) begin
+	if (rst[3]) begin
       mask_a <= 8'hff; // Assumption: cell of 8 bits
       mask_b <= 8'hff;
       mask_c <= 8'hff;
       key_a <= 0;
       key_b <= 0;
-	    key_c <= 0;
-	    bit_cnt <= 0;
-	    pass_cnt <= 0;
+	  key_c <= 0;
+	  bit_cnt <= 0;
+	  pass_cnt <= 0;
       cell_wea_ctrl_ap_a <= 0;
       cell_wea_ctrl_ap_b <= 0;
       cell_wea_ctrl_ap_c <= 0;
@@ -463,10 +464,10 @@ begin
             ap_state_irq <= 0;
             
             // ADDING ADD_D
-            if(cmd < 7 || cmd == 8) begin
+            if(cmd < 7 || cmd == 9) begin
               mask_a <= 1;
               cam_mode_a <= 0;
-              mask_c <= 9'h100 | 1; // assuming mask_c having 9 bits
+              mask_c <= 9'h101; // assuming mask_c having 9 bits
               cam_mode_c <= 1;
               mask_b <= 1;
 
@@ -515,7 +516,7 @@ begin
              end
              
              // ADD, ADD_D and SUB
-             if(cmd == 4 || cmd == 5 || cmd == 8) begin
+             if(cmd == 4 || cmd == 5 || cmd == 9) begin
                 if(cmd == 4) begin
                     key_a <= (add_lut[pass_cnt][0] << bit_cnt);
                     key_b <= (add_lut[pass_cnt][1] << bit_cnt);
@@ -530,16 +531,20 @@ begin
                 end
                 // IF B is non-zero?
                  // ADD Destructive
-                /* {   Compare   ||  Write }  */
-                /* { Cr  | B | A || Cr | B }  */
-                if(cmd == 8) begin
+                /* #                 {   Compare   ||  Write }  */
+                /* #                 { Cr  | B | A || Cr | B }  */
+                /* self.lut_add_d = [ ( 0,   1,  1,    1,   0), */
+                /*                    ( 0,   0,  1,    0,   1), */
+                /*                    ( 1,   0,  0,    0,   1), */
+                /*                    ( 1,   1,  0,    1,   0)  */ 
+                /*                 ] */
+                if(cmd == 9) begin
                     key_a <= (add_d_lut[pass_cnt][2] << bit_cnt);
-                    key_c <= (add_d_lut[pass_cnt][3] << bit_cnt);
                     // Carry or borrow
-                    key_c <= (add_d_lut[pass_cnt][4] << 8);
+                    key_c <= (add_d_lut[pass_cnt][4] << 8) | (add_d_lut[pass_cnt][3] << bit_cnt);
                 end
                 
-                mask_c <= 9'h100 | 1 << bit_cnt;
+                mask_c <= 9'h100 | (1 << bit_cnt);
              end
 
             
@@ -612,15 +617,15 @@ begin
             end
             
             // ADD, ADD_D and SUB
-            if(cmd == 4 || cmd == 5 || cmd == 8) begin
+            if(cmd == 4 || cmd == 5 || cmd == 9) begin
                 if(cmd == 4)
                     data_in_c <= (add_lut[pass_cnt][4] << 8) | (add_lut[pass_cnt][3] << bit_cnt);
                 if(cmd == 5)
                     data_in_c <= (sub_lut[pass_cnt][4] << 8) | (sub_lut[pass_cnt][3] << bit_cnt);
-                if(cmd == 8)
+                if(cmd == 9)
                     data_in_c <= (add_d_lut[pass_cnt][1] << 8) | (add_d_lut[pass_cnt][0] << bit_cnt);
 
-                if(cmd != 8) begin
+                if(cmd != 9) begin
                   if(pass_cnt == 4) begin
                     pass_cnt <= 0;
                     bit_cnt <= bit_cnt + 1;
@@ -661,16 +666,28 @@ begin
             mask_a <= 8'hff; // Assumption: cell of 8 bits
             mask_b <= 8'hff;
             mask_c <= 8'hff;
+            pass_cnt <= 0;
+            bit_cnt <= 0;
+            bit_cnt_mult <= 0;
+            cell_wea_ctrl_ap_a <= 0;
+            cell_wea_ctrl_ap_b <= 0;
+            cell_wea_ctrl_ap_c <= 0;
+            key_a <= 0;
+            key_b <= 0;
+            key_c <= 0;
           end
         endcase
-    end else begin 
+    end
+    /* 
+    else begin 
       mask_a <= 8'hff;
       mask_b <= 8'hff;
       mask_c <= 8'hff;
       cam_mode_a <= 0;
       cam_mode_b <= 0;
       cam_mode_c <= 0;
-    end     
+    end
+    */     
   end
 end
 
