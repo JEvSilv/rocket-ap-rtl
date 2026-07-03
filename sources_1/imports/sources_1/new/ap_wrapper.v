@@ -7,7 +7,8 @@
 
 module APWrapper #(
    parameter WORD_SIZE = 8,
-   parameter CELL_QUANT = 512
+   //parameter CELL_QUANT = 512
+   parameter CELL_QUANT = 480 // 32 bits
 ) (
     input         clock,
     input         reset,
@@ -15,12 +16,17 @@ module APWrapper #(
     input         settings_write_en,
     input         io_req_valid,
     input         io_req_arb_valid,
+    //input  [clogb2(CELL_QUANT*3*2)-1:0] io_req_arb_addr, // 3 CAMs and Two Internal Columns 
+    //input  [clogb2(CELL_QUANT*3*2)-1:0] io_req_bits_addr, // 3 CAMs and Two Internal Columns 
+
     input  [clogb2(CELL_QUANT*3*2)-1:0] io_req_arb_addr, // 3 CAMs and Two Internal Columns 
     input  [clogb2(CELL_QUANT*3*2)-1:0] io_req_bits_addr, // 3 CAMs and Two Internal Columns 
+
     input  [clogb2(CELL_QUANT*3*2)-1:0] settings_io_req_bits_addr, // 3 CAMs and Two Internal Columns 
     input         io_req_bits_write,
     input  [31:0] io_req_bits_wdata,
     input  [3:0]  io_req_bits_eccMask,
+    output ap_burst_read_output,
     output [31:0] io_resp_0 
   );
 
@@ -39,12 +45,15 @@ module APWrapper #(
   reg [3:0] ap_rst;
   reg ap_if_state; // It controls the configuration interface
                   // It is able to block the memory feature
+  reg ap_burst_read;
+  assign ap_burst_read_output = ap_burst_read;
   reg ap_op_direction; // 0 -> vertical | 1 -> horizontal
   reg op_target;    // 0 -> C | 1 -> A
   reg [3:0] ap_cmd;
   reg [1:0] ap_sel_col;
   reg [2:0] ap_sel_internal_col;
-  wire [WORD_SIZE-1:0] ap_data_out_w;
+  //wire [(WORD_SIZE*4)-1:0] ap_data_out_w;
+  wire [31:0] ap_data_out_w; // 32 bits
   wire ap_ap_state_irq_w;
   
   reg [clogb2(CELL_QUANT)-1:0] ap_addr_in;
@@ -85,9 +94,9 @@ module APWrapper #(
   assign cam_c_region = (io_req_bits_addr >= CAM_C_START_REGION & io_req_bits_addr < SETTINGS_REGS_START_REGION) ? 1 : 0;
   assign cam_sel = (cam_a_region == 1) ? 0 : (cam_b_region == 1) ? 1 : (cam_c_region == 1) ? 2 : 0;
 
-  assign cam_a_i_region = (cam_a_region == 1 & io_req_bits_addr >= CAM_A_I_START_REGION) ;
-  assign cam_b_i_region = (cam_b_region == 1 & io_req_bits_addr >= CAM_B_I_START_REGION);
-  assign cam_c_i_region = (cam_c_region == 1 & io_req_bits_addr >= CAM_C_I_START_REGION);
+  assign cam_a_i_region = (cam_a_region == 1) && (io_req_bits_addr >= CAM_A_I_START_REGION) ;
+  assign cam_b_i_region = (cam_b_region == 1) && (io_req_bits_addr >= CAM_B_I_START_REGION);
+  assign cam_c_i_region = (cam_c_region == 1) && (io_req_bits_addr >= CAM_C_I_START_REGION);
 
   //assign cam_internal_col = ((cam_a_i_region == 1) ? 3'b001 : (cam_b_i_region == 1) ? 3'b010 : (cam_c_i_region == 1)) ? 3'b100 : 0;
   assign cam_internal_col =  cam_a_i_region | (cam_b_i_region << 1) | (cam_c_i_region << 2);
@@ -108,6 +117,7 @@ module APWrapper #(
     if(reset) begin
       ap_rst <= 0;
       ap_if_state <= 0;
+      ap_burst_read <= 0;
       ap_op_direction <= 0; // 0 -> vertical | 1 -> horizontal
       ap_cmd <= 0;
       ap_sel_col <= 0;
@@ -131,7 +141,9 @@ module APWrapper #(
                   ap_rst <= io_req_bits_wdata[7:0];
                   ap_trigger_ap <= io_req_bits_wdata[15:8];
                   op_target <= io_req_bits_wdata[23:16];
-                  ap_if_state <= io_req_bits_wdata[31:24]; 
+                  //ap_if_state <= io_req_bits_wdata[31:24]; 
+                  ap_if_state <= io_req_bits_wdata[24:24]; 
+                  ap_burst_read <= io_req_bits_wdata[25:25];
               end
           end
       end else begin
@@ -139,7 +151,8 @@ module APWrapper #(
             ap_sel_col <= final_cam_sel;
             ap_sel_internal_col <= cam_a_i_region | (cam_b_i_region << 1) | (cam_c_i_region << 2);
             ap_data_in <= io_req_bits_wdata;
-            ap_addr_in <= io_req_bits_addr;
+            //ap_addr_in <= io_req_bits_addr; // case 512
+            ap_addr_in <= io_req_bits_addr % CELL_QUANT; // case 480
             ap_write_enable <= io_req_bits_write;
           end
       end

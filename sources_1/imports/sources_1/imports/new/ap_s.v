@@ -24,7 +24,8 @@
    parameter RAM_WIDTH = 1,
    parameter RAM_ADDR_BITS = 1,
    parameter WORD_SIZE = 8,
-   parameter CELL_QUANT = 512
+   parameter CELL_QUANT = 480
+   //parameter CELL_QUANT = 512
 ) (
   input [clogb2(CELL_QUANT)-1:0] addr_in,
   input [WORD_SIZE-1:0] data_in,         
@@ -39,7 +40,8 @@
   input clock,              
   input write_en,
   input read_en,                           
-  output reg [WORD_SIZE-1:0] data_out,
+  //output reg [WORD_SIZE-1:0] data_out,
+  output reg [(WORD_SIZE*4)-1:0] data_out,
   output reg ap_state_irq
 );
  
@@ -51,13 +53,15 @@
 `ifdef MULTIPLE_TARGETS
  reg  [WORD_SIZE:0] key_a;
  reg  [WORD_SIZE:0] mask_a;
- wire [WORD_SIZE:0] data_out_a;
+ //wire [WORD_SIZE:0] data_out_a;
+ wire [(WORD_SIZE*4):0] data_out_a; // 32 bits
  reg [WORD_SIZE:0] data_in_a;
  wire [WORD_SIZE:0] data_in_a_cam;
 `else
  reg  [WORD_SIZE-1:0] key_a;
  reg  [WORD_SIZE-1:0] mask_a;
- wire [WORD_SIZE-1:0] data_out_a;
+ //wire [WORD_SIZE-1:0] data_out_a;
+ wire [(WORD_SIZE*4)-1:0] data_out_a; // 32 bits
  reg [WORD_SIZE-1:0] data_in_a;
  wire [WORD_SIZE-1:0] data_in_a_cam;
 `endif
@@ -77,8 +81,10 @@
  reg  [WORD_SIZE:0] mask_c;
 
  //wire [WORD_SIZE:0] data_out_a;
- wire [WORD_SIZE-1:0] data_out_b;
- wire [WORD_SIZE:0] data_out_c;
+ //wire [WORD_SIZE-1:0] data_out_b;
+ wire [(WORD_SIZE*4)-1:0] data_out_b; // 32 bits
+ //wire [WORD_SIZE:0] data_out_c;
+ wire [(WORD_SIZE*4):0] data_out_c; // 32 bits
  
  //reg [WORD_SIZE:0] data_in_a;
  reg [WORD_SIZE-1:0] data_in_b;
@@ -218,7 +224,7 @@ always @ (posedge clock) begin
 				INIT: begin	
 					if (cmd == 7) begin
 						next_state = DONE;
-					end else if (cmd == 8) begin
+					end else if (cmd == 8 || cmd == 10) begin
 						next_state = WRITE;
 					end else begin
 						next_state = COMPARE;
@@ -242,7 +248,7 @@ always @ (posedge clock) begin
 				end
 
 				WRITE: begin
-					if (cmd == 8) begin
+					if (cmd == 8 || cmd == 10) begin
 						next_state = DONE;
 					end else begin
 						next_state = COMPARE;         
@@ -497,12 +503,30 @@ begin
                         end
                 endcase
               end else begin
-                data_in_c <= 1;
-                mask_a <= 8'hff;
-                key_a <= first_data_cell_b;
-                cam_mode_c <= 1;
-                mask_b <= 0;
-                mask_c <= 8'hff;
+                  // SEARCH
+                  if(cmd == 8) begin
+                    data_in_c <= 1;
+                    mask_a <= 8'hff;
+                    key_a <= first_data_cell_b;
+                    cam_mode_c <= 1;
+                    mask_b <= 0;
+                    mask_c <= 8'hff;
+                  end
+                  // RELU
+                  if(cmd == 10) begin
+                    data_in_a <= 0;
+                    data_in_b <= 0;
+                    data_in_c <= 0;
+                    mask_a <= 9'h80;
+                    key_a <= 9'h80;
+                    mask_b <= 8'h80;
+                    key_b <= 8'h80;
+                    mask_c <= 9'h80;
+                    key_c <= 9'h80;
+                    cam_mode_a <= 1;
+                    cam_mode_b <= 1;
+                    cam_mode_c <= 1;
+                  end
               end
             end
           end
@@ -580,7 +604,7 @@ begin
             // $display("bit_count: %d", bit_cnt);
             // $display("bit_count_mult: %d", bit_cnt_mult);
             // $display("pass: %d\n", pass_cnt);
-            
+           
             // Alterar para 2D - horizontal
             if(op_direction == 1) begin
                 if(sel_col == 0) begin    
@@ -653,10 +677,16 @@ begin
                 end            
              end
 
-             // SEARCH
-             /* if(cmd == 8) begin */
-             /*   data_in_c <= 1; */
-             /* end */
+            // RELU
+            if(cmd == 10) begin
+               cell_wea_ctrl_ap_a <= tags_a;
+               cell_wea_ctrl_ap_b <= tags_b;
+               cell_wea_ctrl_ap_c <= tags_c;
+               mask_a <= 9'hff;
+               mask_b <= 8'hff;
+               mask_c <= 9'hff;
+            end
+
           end
           default: begin
             ap_state_irq <= 1;

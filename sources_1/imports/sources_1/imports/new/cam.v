@@ -16,9 +16,11 @@
 (* keep_hierarchy = "yes" *) module CAM #(
    parameter RAM_ADDR_BITS = 1,
    parameter WORD_SIZE = 8,
-   parameter CELL_QUANT = 512 
+   parameter CELL_QUANT = 480
+   //parameter CELL_QUANT = 512 
 ) (
-  input [clogb2(CELL_QUANT)-2:0] addr_in,
+  input [clogb2(CELL_QUANT)-1:0] addr_in,
+  //input [8:0] addr_in, // 32 bits 480
   input [CELL_QUANT-1:0] cell_wea_ctrl_ap,
   input internal_col_in,
   input cam_mode,
@@ -35,7 +37,8 @@
   input wea,                  
   output [CELL_QUANT-1:0] tags,
   output [WORD_SIZE-1:0] first_data_cell,
-  output [WORD_SIZE-1:0] doutb
+  //output [WORD_SIZE-1:0] doutb
+  output [(WORD_SIZE*4)-1:0] doutb // 32 bits
 );
 
 wire [WORD_SIZE-1:0] cell_doutb_ctrl [CELL_QUANT-1:0];
@@ -58,7 +61,22 @@ assign masked_dina_even = dina & mask_v;
 assign masked_key_odd  = key_d & mask_d;
 assign masked_dina_odd = dina & mask_d;
 
-assign doutb = cell_doutb_ctrl[addr_in];
+wire [WORD_SIZE-1:0] byte_0;
+wire [WORD_SIZE-1:0] byte_1;
+wire [WORD_SIZE-1:0] byte_2;
+wire [WORD_SIZE-1:0] byte_3;
+
+assign byte_0 = cell_doutb_ctrl[addr_in];
+//assign byte_1 = (addr_in + 1) > 511 ? 0 : cell_doutb_ctrl[addr_in+1];
+//assign byte_2 = (addr_in + 2) > 511 ? 0 : cell_doutb_ctrl[addr_in+2];
+//assign byte_3 = (addr_in + 3) > 511 ? 0 : cell_doutb_ctrl[addr_in+3];
+assign byte_1 = cell_doutb_ctrl[addr_in+1];
+assign byte_2 = cell_doutb_ctrl[addr_in+2];
+assign byte_3 = cell_doutb_ctrl[addr_in+3];
+
+//assign doutb = cell_doutb_ctrl[addr_in];
+assign doutb = {byte_3[7:0], byte_2[7:0], byte_1[7:0], byte_0[7:0]};
+
 assign first_data_cell = cell_doutb_ctrl[0];
 
 // Module_name #(.parameter_name(valor)) instance_name;
